@@ -82,8 +82,8 @@ for stats_file, coords, output_file, title in CONFIGS:
     fg_out = folium.FeatureGroup(name="Sorties", show=True).add_to(m)
 
     for _, row in merged.iterrows():
-        r_in  = scale_radius(row["entrance_count"], min_count, max_count)
-        r_out = scale_radius(row["exit_count"],     min_count, max_count)
+        r_in  = row["entrance_count"] / 10
+        r_out = row["exit_count"] / 10
 
         folium.CircleMarker(
             location=[row["lat"], row["lon"]],

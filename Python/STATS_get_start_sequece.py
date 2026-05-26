@@ -81,8 +81,16 @@ def entree_exit(line, morning, evening, activity_time = (5*3600, 19*3600), merge
         user_cells = [MERGE[merge_function](c) for c in line[8::2]]
         user_stamps = [int(ts) for ts in line[9::2]]
 
-    Home_morning = most_cell_present(user_cells, user_stamps, (0, morning))
-    Home_evening = most_cell_present(user_cells, user_stamps, (evening, 24*3600))
+    if len(user_cells) <= 0 or len(user_stamps) <= 0:
+        return [], []
+
+    
+    Home_morning = None
+    Home_evening = None
+
+    # On commente les lignes suivantes si on ne veut pas prendre en compte les présences à la maison pour déterminer les entrées et sorties
+    #Home_morning = most_cell_present(user_cells, user_stamps, (0, morning))
+    #Home_evening = most_cell_present(user_cells, user_stamps, (evening, 24*3600))
 
     if len(user_cells) <= 1 or len(user_stamps) <= 1:
         return None, None
