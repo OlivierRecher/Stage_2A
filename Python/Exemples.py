@@ -1,27 +1,103 @@
 import matplotlib.pyplot as plt
-import pandas as pd
+import csv
+import numpy as np
 from pathlib import Path
+from STATS_get_start_sequece import entree_exit
 import tqdm
-import csv
-import re
-import csv
 from utils import get_day
-
-"""
-The aim of this srcipt is to have the frequency of use of each cell by hour, 
-in order to have a better understanding of the presence of users in the study area during the day, 
-and to be able to classify them based on their presence at base stations during the day.
-"""
+import pandas as pd
+import re
 
 MAIN_DIR = Path(__file__).parent.parent
-INPUT_DIR = MAIN_DIR / f"Database/no_duplicate"
-OUTPUT_DIR = MAIN_DIR / f"results/intermediate_result"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+INPUT_DIR = MAIN_DIR /  f"Database/no_duplicate"
 
 files = [file for file in INPUT_DIR.glob("*.csv")]
 
-INPUT_CELLS = MAIN_DIR / "Database/cells/cd_142_cells.csv"
+def plot_presence_over_time(unser_stamps, id_user_id, day):
+    """
+    Plot the presence of a user, the number of connections hour by hour in a histogram.
+    """
 
+    hourly_counts = [0] * 24
+    for stamp in unser_stamps:
+        hour = stamp // 3600
+        hourly_counts[hour] += 1
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(range(24), hourly_counts)
+    plt.title(f"Presence of User {id_user_id} Over Time - {day}")
+    plt.xlabel("Hour of the Day")
+    plt.ylabel("Number of Connections")
+    plt.xticks(range(24))
+    plt.grid(axis='y', alpha=0.75)
+    plt.show()
+
+# 856,0 un utilisateur qui fait un passage dans la zone en journée, il a une entrée et une sortie.
+# 1277,0 une utilisateur avec plein de connexions, présent tout la journée donc ni entrée ni sortie.
+# 2578,0 un utilisateur présent presque toute la journée, mais qui à une absence au milieu.
+# 3740,0 un utilisateur présent que très tot le matin donc pas d'entrée mais une sortie.
+# 2069758,2 un utilisateur qui arrive au court de la journée mais qui reste jusqu'à la fin, il a une entrée mais pas de sortie.
+# 2069878,2 un utilisateur qui n'a pas d'activité mais des pings de verification toute la journée, il n'a ni entrée ni sortie.
+
+# 2069871,2 un exemple d'utilisateur avec des trous de partout pour montrer comment se fait l'occupation des cellules au cours de la journée.
+# 992,0 un exemple d'utilisateur pour montrer le nombre de connexions par heure et par cellule.
+id_utilisateur,idice_folder = 856,0
+
+with open(files[idice_folder], mode='r', encoding='utf-8', newline='') as f:
+    reader = csv.reader(f, delimiter=';')
+    for line in reader:
+        if int(line[0]) == id_utilisateur:
+            utilisateur = line
+            break
+
+user_stamps = [int(ts) for ts in utilisateur[9::2]]
+plot_presence_over_time(user_stamps,id_user_id=id_utilisateur, day=get_day(files[idice_folder]))
+
+print("Enstrances and exits for user", id_utilisateur)
+entrances, exits = entree_exit(utilisateur, 4*3600, 20*3600, merge_function=None)
+print("Entrances:", entrances)
+print("Exits:", exits)
+
+def navigate_lines(filepath):
+    with open(filepath, mode='r', encoding='utf-8', newline='') as f:
+        reader = csv.reader(f, delimiter=';')
+        lines = list(reader)
+
+    index = [5]
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    def draw(idx):
+        line = lines[idx]
+        user_stamps = [int(ts) for ts in line[9::2]]
+
+        hourly_counts = [0] * 24
+        for stamp in user_stamps:
+            hourly_counts[stamp // 3600] += 1
+
+        ax.clear()
+        ax.bar(range(24), hourly_counts)
+        ax.set_title(f"Ligne {idx + 1}/{len(lines)} — Utilisateur {line[0]}")
+        ax.set_xlabel("Heure de la journée")
+        ax.set_ylabel("Nombre de connexions")
+        ax.set_xticks(range(24))
+        ax.grid(axis='y', alpha=0.75)
+        fig.canvas.draw()
+
+    def on_key(event):
+        if event.key == 'right':
+            index[0] = (index[0] + 1) % len(lines)
+            draw(index[0])
+        elif event.key == 'left':
+            index[0] = (index[0] - 1) % len(lines)
+            draw(index[0])
+        elif event.key == ' ':
+            plt.close(fig)
+
+    fig.canvas.mpl_connect('key_press_event', on_key)
+    draw(index[0] % len(lines))
+    plt.show()
+
+#navigate_lines(files[idice_folder])
 
 def presence_in_cells(cells,stamps,dic_cells_nb_user,dic_cells_nb_connections):
     """
@@ -97,6 +173,8 @@ def presence_in_cells(cells,stamps,dic_cells_nb_user,dic_cells_nb_connections):
     
     return dic_cells_nb_user, dic_cells_nb_connections
 
+INPUT_CELLS = MAIN_DIR / "Database/cells/cd_142_cells.csv"
+
 def get_cell_code(cell: str) -> str:
     """Extract base station if merge=True."""
     if cell == '': return cell
@@ -115,89 +193,26 @@ MERGE = {
 }
 
 
-
 cells_df = pd.read_csv(INPUT_CELLS, sep=";")
 cell_ids = cells_df["cellid"].tolist()
-cell_ids_simple = cells_df["cellid"].apply(get_cell_code).unique().tolist()
-cell_ids_2g3g = cells_df["cellid"].apply(get_cell_code2).unique().tolist()
 
-hour_cols = [f"{hour}h-{hour+1}h" for hour in range(24)]
+dict_cells_nb_user = {cell: [0]*24 for cell in cell_ids}
+dict_cells_nb_connections = {cell: [0]*24 for cell in cell_ids}
 
-all_dfs_nb_user = []
-all_dfs_nb_connections = []
-all_dfs_simple_nb_user = []
-all_dfs_simple_nb_connections = []
-all_dfs_2g3g_nb_user = []
-all_dfs_2g3g_nb_connections = []
+user_cells = [c for c in utilisateur[8::2]]
+user_stamps = [int(ts) for ts in utilisateur[9::2]]
+dic_cells_nb_user, dic_cells_nb_connections = presence_in_cells(user_cells, user_stamps, dict_cells_nb_user, dict_cells_nb_connections)
 
-for file in tqdm.tqdm(files):
-    day = get_day(file)
-
-    dict_cells_nb_user = {cell: [0]*24 for cell in cell_ids}
-    dict_cells_nb_connections = {cell: [0]*24 for cell in cell_ids}
-
-    dict_cells_simple_merged_nb_user = {cell: [0]*24 for cell in cell_ids_simple}
-    dict_cells_simple_merged_nb_connections = {cell: [0]*24 for cell in cell_ids_simple}
-
-    dict_cells_2g3g_merged_nb_user = {cell: [0]*24 for cell in cell_ids_2g3g}
-    dict_cells_2g3g_merged_nb_connections = {cell: [0]*24 for cell in cell_ids_2g3g}
-
-    with open(file, mode='r', encoding='utf-8', newline='') as f:
-        reader = csv.reader(f, delimiter=';')
-        for line in reader:
-            user_cells = [c for c in line[8::2] if c]
-            user_stamps = [int(ts) for ts in line[9::2] if ts]
-
-            dict_cells_nb_user, dict_cells_nb_connections = presence_in_cells(user_cells, user_stamps, dict_cells_nb_user, dict_cells_nb_connections)
-            dict_cells_simple_merged_nb_user, dict_cells_simple_merged_nb_connections = presence_in_cells([MERGE["simple"](c) for c in user_cells], user_stamps, dict_cells_simple_merged_nb_user, dict_cells_simple_merged_nb_connections)
-            dict_cells_2g3g_merged_nb_user, dict_cells_2g3g_merged_nb_connections = presence_in_cells([MERGE["2g3g"](c) for c in user_cells], user_stamps, dict_cells_2g3g_merged_nb_user, dict_cells_2g3g_merged_nb_connections)
-
-    df_day_nb_user = pd.DataFrame.from_dict(dict_cells_nb_user, orient='index', columns=hour_cols)
-    df_day_nb_user.index.name = "cellid"
-    df_day_nb_user.insert(0, "day", day)
-    all_dfs_nb_user.append(df_day_nb_user)
-
-    df_day_nb_connections = pd.DataFrame.from_dict(dict_cells_nb_connections, orient='index', columns=hour_cols)
-    df_day_nb_connections.index.name = "cellid"
-    df_day_nb_connections.insert(0, "day", day)
-    all_dfs_nb_connections.append(df_day_nb_connections)
-
-    df_day_simple_nb_user = pd.DataFrame.from_dict(dict_cells_simple_merged_nb_user, orient='index', columns=hour_cols)
-    df_day_simple_nb_user.index.name = "cellid"
-    df_day_simple_nb_user.insert(0, "day", day)
-    all_dfs_simple_nb_user.append(df_day_simple_nb_user)
-
-    df_day_simple_nb_connections = pd.DataFrame.from_dict(dict_cells_simple_merged_nb_connections, orient='index', columns=hour_cols)
-    df_day_simple_nb_connections.index.name = "cellid"
-    df_day_simple_nb_connections.insert(0, "day", day)
-    all_dfs_simple_nb_connections.append(df_day_simple_nb_connections)
-
-    df_day_2g3g_nb_user = pd.DataFrame.from_dict(dict_cells_2g3g_merged_nb_user, orient='index', columns=hour_cols)
-    df_day_2g3g_nb_user.index.name = "cellid"
-    df_day_2g3g_nb_user.insert(0, "day", day)
-    all_dfs_2g3g_nb_user.append(df_day_2g3g_nb_user)
-
-    df_day_2g3g_nb_connections = pd.DataFrame.from_dict(dict_cells_2g3g_merged_nb_connections, orient='index', columns=hour_cols)
-    df_day_2g3g_nb_connections.index.name = "cellid"
-    df_day_2g3g_nb_connections.insert(0, "day", day)
-    all_dfs_2g3g_nb_connections.append(df_day_2g3g_nb_connections)
-
-df = pd.concat(all_dfs_nb_user).reset_index().set_index(["day", "cellid"])
-df_nb_connections = pd.concat(all_dfs_nb_connections).reset_index().set_index(["day", "cellid"])
-
-df_simple_merged = pd.concat(all_dfs_simple_nb_user).reset_index().set_index(["day", "cellid"])
-df_simple_merged_connections = pd.concat(all_dfs_simple_nb_connections).reset_index().set_index(["day", "cellid"])
-
-df_2g3g_merged = pd.concat(all_dfs_2g3g_nb_user).reset_index().set_index(["day", "cellid"])
-df_2g3g_merged_connections = pd.concat(all_dfs_2g3g_nb_connections).reset_index().set_index(["day", "cellid"])
-
-
-df.to_csv(OUTPUT_DIR / "stats_use_cell_by_hour_by_day.csv", sep=";", header=True, index=True)
-df_nb_connections.to_csv(OUTPUT_DIR / "stats_connections_cell_by_hour_by_day.csv", sep=";", header=True, index=True)
-
-df_simple_merged.to_csv(OUTPUT_DIR / "stats_use_cell_by_hour_simple_merge_by_day.csv", sep=";", header=True, index=True)
-df_simple_merged_connections.to_csv(OUTPUT_DIR / "stats_connections_cell_by_hour_simple_merge_by_day.csv", sep=";", header=True, index=True)
-
-df_2g3g_merged.to_csv(OUTPUT_DIR / "stats_use_cell_by_hour_2g3g_merge_by_day.csv", sep=";", header=True, index=True)
-df_2g3g_merged_connections.to_csv(OUTPUT_DIR / "stats_connections_cell_by_hour_2g3g_merge_by_day.csv", sep=";", header=True, index=True)
-
+def affichage_cells(dic):
+    for cell in dic:
+        if sum(dic[cell]) > 0:
+            plt.figure(figsize=(10, 6))
+            plt.bar(range(24), dic[cell])
+            plt.title(f"Cell {cell} — User {id_utilisateur}")
+            plt.xlabel("Hour of the Day")
+            plt.ylabel("Number of Connections")
+            plt.xticks(range(24))
+            plt.grid(axis='y', alpha=0.75)
+            plt.show()
+        
+#affichage_cells(dic_cells_nb_user)
