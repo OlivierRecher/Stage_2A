@@ -98,46 +98,57 @@ def build_day_rows(day, list_entrance, list_exit, cluster_type):
     return rows
 
 
-rows_no_merge = []
-rows_simple = []
-rows_2g3g = []
+def build_entrance_exit_stats():
+    """Process every day file and write the entrance/exit stats CSVs.
 
-for file in tqdm.tqdm(files):
+    Kept out of import time: this scans the whole dataset (~hundreds of MB),
+    so it only runs when this script is executed directly, not when another
+    module imports `entree_exit`.
+    """
+    rows_no_merge = []
+    rows_simple = []
+    rows_2g3g = []
 
-    list_entrance = {i:[] for i in range(5)}
-    list_exit = {i:[] for i in range(5)}
-    list_entrance_simple_merged = {i:[] for i in range(5)}
-    list_exit_simple_merged = {i:[] for i in range(5)}
-    list_entrance_2g3g_merged = {i:[] for i in range(5)}
-    list_exit_2g3g_merged = {i:[] for i in range(5)}
+    for file in tqdm.tqdm(files):
 
-    day = get_day(file)
-    with open(file, mode='r', encoding='utf-8', newline='') as f:
-        reader = csv.reader(f, delimiter=';')
-        for line in reader:
-            user_stamps = [int(x) for x in line[9::2]]
-            i = classify_profil(user_stamps)
+        list_entrance = {i:[] for i in range(5)}
+        list_exit = {i:[] for i in range(5)}
+        list_entrance_simple_merged = {i:[] for i in range(5)}
+        list_exit_simple_merged = {i:[] for i in range(5)}
+        list_entrance_2g3g_merged = {i:[] for i in range(5)}
+        list_exit_2g3g_merged = {i:[] for i in range(5)}
 
-            entrance, exits = entree_exit(line,4*3600,20*3600, merge_function=None)
-            if entrance is None or exits is None:
-                break
+        day = get_day(file)
+        with open(file, mode='r', encoding='utf-8', newline='') as f:
+            reader = csv.reader(f, delimiter=';')
+            for line in reader:
+                user_stamps = [int(x) for x in line[9::2]]
+                i = classify_profil(user_stamps)
 
-            list_entrance[i] += entrance
-            list_exit[i] += exits
+                entrance, exits = entree_exit(line,4*3600,20*3600, merge_function=None)
+                if entrance is None or exits is None:
+                    break
 
-            entrance_simple_merged, exit_simple_merged = entree_exit(line,4*3600,20*3600, merge_function="simple")
-            list_entrance_simple_merged[i] += entrance_simple_merged
-            list_exit_simple_merged[i] += exit_simple_merged
+                list_entrance[i] += entrance
+                list_exit[i] += exits
 
-            entrance_2g3g_merged, exit_2g3g_merged = entree_exit(line,4*3600,20*3600, merge_function="2g3g")
-            list_entrance_2g3g_merged[i] += entrance_2g3g_merged
-            list_exit_2g3g_merged[i] += exit_2g3g_merged
-    for i in range(5):
-        rows_no_merge += build_day_rows(day, list_entrance[i], list_exit[i],i)
-        rows_simple += build_day_rows(day, list_entrance_simple_merged[i], list_exit_simple_merged[i],i)
-        rows_2g3g += build_day_rows(day, list_entrance_2g3g_merged[i], list_exit_2g3g_merged[i],i)
+                entrance_simple_merged, exit_simple_merged = entree_exit(line,4*3600,20*3600, merge_function="simple")
+                list_entrance_simple_merged[i] += entrance_simple_merged
+                list_exit_simple_merged[i] += exit_simple_merged
+
+                entrance_2g3g_merged, exit_2g3g_merged = entree_exit(line,4*3600,20*3600, merge_function="2g3g")
+                list_entrance_2g3g_merged[i] += entrance_2g3g_merged
+                list_exit_2g3g_merged[i] += exit_2g3g_merged
+        for i in range(5):
+            rows_no_merge += build_day_rows(day, list_entrance[i], list_exit[i],i)
+            rows_simple += build_day_rows(day, list_entrance_simple_merged[i], list_exit_simple_merged[i],i)
+            rows_2g3g += build_day_rows(day, list_entrance_2g3g_merged[i], list_exit_2g3g_merged[i],i)
 
 
-pd.DataFrame(rows_no_merge).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_no_merge.csv", index=False, sep=";")
-pd.DataFrame(rows_simple).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_simple_merge.csv", index=False, sep=";")
-pd.DataFrame(rows_2g3g).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_2g3g_merge.csv", index=False, sep=";")
+    pd.DataFrame(rows_no_merge).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_no_merge.csv", index=False, sep=";")
+    pd.DataFrame(rows_simple).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_simple_merge.csv", index=False, sep=";")
+    pd.DataFrame(rows_2g3g).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_2g3g_merge.csv", index=False, sep=";")
+
+
+if __name__ == "__main__":
+    build_entrance_exit_stats()
