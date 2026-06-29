@@ -37,19 +37,14 @@ MERGE = {
 }
 
 
-def entree_exit(line, morning, evening, merge_function = None):
+def entree_exit_from_parsed(user_cells, user_stamps, morning, evening):
+    """Core entrance/exit detection on already-parsed cells and stamps.
 
-    if merge_function is None:
-        user_cells = [c for c in line[8::2]]
-        user_stamps = [int(ts) for ts in line[9::2]]
-
-    else:
-        user_cells = [MERGE[merge_function](c) for c in line[8::2]]
-        user_stamps = [int(ts) for ts in line[9::2]]
-
+    Callers that process many lines should parse `user_stamps` once and reuse
+    them across merge modes instead of re-parsing the raw line each time.
+    """
     if len(user_cells) <= 1 or len(user_stamps) <= 1:
         return None, None
-
 
     entrances = []
     exits = []
@@ -71,6 +66,16 @@ def entree_exit(line, morning, evening, merge_function = None):
 
     return entrances, exits
 
+
+def entree_exit(line, morning, evening, merge_function = None):
+    """Convenience wrapper: parse a raw line then run the core detection."""
+    user_stamps = [int(ts) for ts in line[9::2]]
+    if merge_function is None:
+        user_cells = [c for c in line[8::2]]
+    else:
+        user_cells = [MERGE[merge_function](c) for c in line[8::2]]
+
+    return entree_exit_from_parsed(user_cells, user_stamps, morning, evening)
 
 def occurences(station, list_stations):
     return list_stations.count(station)
@@ -122,21 +127,25 @@ def build_entrance_exit_stats():
         with open(file, mode='r', encoding='utf-8', newline='') as f:
             reader = csv.reader(f, delimiter=';')
             for line in reader:
+                # Parse stamps and base cells once, then reuse across merge modes.
                 user_stamps = [int(x) for x in line[9::2]]
+                base_cells = line[8::2]
                 i = classify_profil(user_stamps)
 
-                entrance, exits = entree_exit(line,4*3600,20*3600, merge_function=None)
+                entrance, exits = entree_exit_from_parsed(base_cells, user_stamps, 4*3600, 20*3600)
                 if entrance is None or exits is None:
                     break
 
                 list_entrance[i] += entrance
                 list_exit[i] += exits
 
-                entrance_simple_merged, exit_simple_merged = entree_exit(line,4*3600,20*3600, merge_function="simple")
+                simple_cells = [get_cell_code(c) for c in base_cells]
+                entrance_simple_merged, exit_simple_merged = entree_exit_from_parsed(simple_cells, user_stamps, 4*3600, 20*3600)
                 list_entrance_simple_merged[i] += entrance_simple_merged
                 list_exit_simple_merged[i] += exit_simple_merged
 
-                entrance_2g3g_merged, exit_2g3g_merged = entree_exit(line,4*3600,20*3600, merge_function="2g3g")
+                g23_cells = [get_cell_code2(c) for c in base_cells]
+                entrance_2g3g_merged, exit_2g3g_merged = entree_exit_from_parsed(g23_cells, user_stamps, 4*3600, 20*3600)
                 list_entrance_2g3g_merged[i] += entrance_2g3g_merged
                 list_exit_2g3g_merged[i] += exit_2g3g_merged
         for i in range(5):
@@ -148,7 +157,6 @@ def build_entrance_exit_stats():
     pd.DataFrame(rows_no_merge).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_no_merge.csv", index=False, sep=";")
     pd.DataFrame(rows_simple).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_simple_merge.csv", index=False, sep=";")
     pd.DataFrame(rows_2g3g).sort_values(["day", "station","cluster_type"]).to_csv(INTERMEDIATE_PATH / "stats_entrance_exit_2g3g_merge.csv", index=False, sep=";")
-
 
 if __name__ == "__main__":
     build_entrance_exit_stats()

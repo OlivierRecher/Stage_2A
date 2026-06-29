@@ -250,6 +250,6 @@ if __name__ == "__main__":
 
     navigate_lines(files[idice_folder])
 
-    affichage_cells(dic_cells_nb_user)
+    # affichage_cells(dic_cells_nb_user)
 
-    afficher_ex_class()
+    # afficher_ex_class()
