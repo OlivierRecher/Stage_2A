@@ -9,5 +9,6 @@ CLAUDE.md
 presentation/*
 report/*
 
-results/
-results/cd_142/plots/
+Results/
+Results/cd_142/plots/
+MyResults/
